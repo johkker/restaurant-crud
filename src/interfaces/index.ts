@@ -1,27 +1,18 @@
 import { Type } from '../entities';
 
-interface OpenHour {
+interface OpenHours {
   from: string;
-
   to: string;
 }
 
 interface OpenTimes {
-  sunday: OpenHour;
-
-  monday: OpenHour;
-
-  tuesday: OpenHour;
-
-  wednesday: OpenHour;
-
-  thursday: OpenHour;
-
-  friday: OpenHour;
-
-  saturday: OpenHour;
-
-  holydays: OpenHour;
+  sunday: OpenHours[] | 'closed';
+  monday: OpenHours[] | 'closed';
+  tuesday: OpenHours[] | 'closed';
+  wednesday: OpenHours[] | 'closed';
+  thursday: OpenHours[] | 'closed';
+  friday: OpenHours[] | 'closed';
+  saturday: OpenHours[] | 'closed';
 }
 
 interface CreateRestaurantInput {
@@ -34,14 +25,13 @@ interface CreateRestaurantInput {
 }
 
 interface UpdateOpenTimesInput {
-  sunday?: OpenHour;
-  monday?: OpenHour;
-  tuesday?: OpenHour;
-  wednesday?: OpenHour;
-  thursday?: OpenHour;
-  friday?: OpenHour;
-  saturday?: OpenHour;
-  holydays?: OpenHour;
+  sunday?: OpenHours[] | 'closed';
+  monday?: OpenHours[] | 'closed';
+  tuesday?: OpenHours[] | 'closed';
+  wednesday?: OpenHours[] | 'closed';
+  thursday?: OpenHours[] | 'closed';
+  friday?: OpenHours[] | 'closed';
+  saturday?: OpenHours[] | 'closed';
 }
 interface UpdateRestaurantInput {
   name?: string;
@@ -52,10 +42,19 @@ interface UpdateRestaurantInput {
   openTimes?: UpdateOpenTimesInput;
 }
 
+interface CreateTypeInput {
+  name: string;
+}
+
+interface CheckOpenStatusInput {
+  timeToCheck: Date;
+}
 export {
   OpenTimes,
-  OpenHour,
+  OpenHours,
   CreateRestaurantInput,
   UpdateRestaurantInput,
   UpdateOpenTimesInput,
+  CreateTypeInput,
+  CheckOpenStatusInput,
 };

@@ -1,8 +1,7 @@
-import { LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 import { restaurantRepository, typeRepository } from '../repositories';
 import GlobalError from '../errors';
-import { currentDay, currentTime } from '../utils';
 import {
+  CheckOpenStatusInput,
   CreateRestaurantInput,
   OpenTimes,
   UpdateRestaurantInput,
@@ -19,27 +18,7 @@ const getAllRestaurants = async () => {
   return restaurants;
 };
 
-const getAllOpenRestaurants = async () => {
-  const openRestaurants = await restaurantRepository.findAndCount({
-    relations: ['type'],
-    where: {
-      openTimes: {
-        [currentDay]: {
-          from: LessThanOrEqual(currentTime),
-          to: MoreThanOrEqual(currentTime),
-        },
-      },
-    },
-  });
-
-  if (!openRestaurants[1]) {
-    throw new GlobalError("There's no restaurant open", 404);
-  }
-
-  return openRestaurants;
-};
-
-const getRestaurantById = async (id: string, isOpenEndpoint: boolean) => {
+const getRestaurantById = async (id: string) => {
   const restaurant = await restaurantRepository.findOne({
     where: {
       id: id,
@@ -48,32 +27,51 @@ const getRestaurantById = async (id: string, isOpenEndpoint: boolean) => {
 
   if (!restaurant) throw new Error('Restaurant not found');
 
-  const { openTimes } = restaurant;
-  const { from, to } = openTimes[currentDay];
-
-  const isOpen = currentTime < from || currentTime > to ? false : true;
-
-  if (isOpenEndpoint) {
-    return isOpen;
-  }
-
   return {
     ...restaurant,
-    isOpen: isOpen,
   };
 };
 
-const getRestaurantsByType = async (type: string) => {
-  const restaurants = await restaurantRepository.findAndCount({
-    relations: ['type'],
+const checkIsOpen = async (id: string, data: CheckOpenStatusInput) => {
+  const { timeToCheck } = data;
+  const restaurant = await restaurantRepository.findOne({
     where: {
-      type: {
-        name: type,
-      },
+      id: id,
     },
   });
 
-  if (!restaurants[1])
+  if (!restaurant) throw new Error('Restaurant not found');
+
+  const dayToCheck = timeToCheck
+    .toLocaleString('en-us', { weekday: 'long' })
+    .toLowerCase() as keyof OpenTimes;
+
+  const timeToCheckString = timeToCheck.toLocaleTimeString('pt-br', {
+    timeStyle: 'short',
+  });
+
+  const { openTimes } = restaurant;
+
+  const openHours = openTimes[dayToCheck];
+
+  if (openHours === 'closed') return false;
+
+  const isOpen = openHours.some((openHour) => {
+    const { from, to } = openHour;
+    return from <= timeToCheckString && to >= timeToCheckString;
+  });
+
+  return isOpen;
+};
+
+const getRestaurantsByType = async (typeId: string) => {
+  const id = Number(typeId);
+  const restaurants = await typeRepository.findOne({
+    where: { id: id },
+    relations: ['restaurants'],
+  });
+
+  if (restaurants?.restaurants.length === 0)
     throw new GlobalError('No restaurants found in this category.', 404);
 
   return restaurants;
@@ -81,7 +79,7 @@ const getRestaurantsByType = async (type: string) => {
 
 const createRestaurant = async (data: CreateRestaurantInput) => {
   const existingRestaurant = await restaurantRepository.findOne({
-    where: { cnpj: data.cnpj, name: data.name },
+    where: [{ name: data.name }, { cnpj: data.cnpj }],
   });
   if (existingRestaurant)
     throw new GlobalError(
@@ -107,42 +105,37 @@ const createRestaurant = async (data: CreateRestaurantInput) => {
 
   restaurantRepository.create(newRestaurant);
 
-  await restaurantRepository
-    .save(newRestaurant)
-    .then(() => {
-      return newRestaurant;
-    })
-    .catch((err) => {
-      console.log(err);
-      throw new GlobalError(
-        'Something went wrong while saving to the database. Try again. If error persists, contact an admin.',
-        500
-      );
-    });
+  await restaurantRepository.save(newRestaurant);
+
+  return {
+    message: 'New restaurant created successfully',
+    ...newRestaurant,
+  };
 };
 
 const updateRestaurant = async (id: string, data: UpdateRestaurantInput) => {
-  const { name, cnpj, address, phone, type, openTimes } = data;
+  if (!data) throw new GlobalError('No data provided', 400);
+
   const restaurant = await restaurantRepository.findOne({ where: { id: id } });
   if (!restaurant) throw new GlobalError('Restaurant not found', 404);
 
-  const newType = type
-    ? await typeRepository.findOne({ where: { name: type } })
+  const newType = data.type
+    ? await typeRepository.findOne({ where: { name: data.type } })
     : restaurant.type;
 
-  if (openTimes) {
-    for (const day in openTimes) {
-      const dayObject = openTimes[day as keyof OpenTimes];
+  if (data.openTimes) {
+    for (const day in data.openTimes) {
+      const dayObject = data.openTimes[day as keyof OpenTimes];
       if (dayObject) {
         restaurant.openTimes[day as keyof OpenTimes] = dayObject;
       }
     }
   }
 
-  restaurant.name = name ? name : restaurant.name;
-  restaurant.cnpj = cnpj ? cnpj : restaurant.cnpj;
-  restaurant.address = address ? address : restaurant.address;
-  restaurant.phone = phone ? phone : restaurant.phone;
+  restaurant.name = data.name ? data.name : restaurant.name;
+  restaurant.cnpj = data.cnpj ? data.cnpj : restaurant.cnpj;
+  restaurant.address = data.address ? data.address : restaurant.address;
+  restaurant.phone = data.phone ? data.phone : restaurant.phone;
   restaurant.type = newType ? newType : restaurant.type;
 
   await restaurantRepository.save(restaurant);
@@ -159,22 +152,12 @@ const deleteRestaurant = async (id: string) => {
   return 'Restaurant deleted successfully';
 };
 
-const getAllTypes = async () => {
-  const types = await typeRepository.find();
-  if (!types)
-    throw new GlobalError(
-      'There are no types registered. Contact an admin.',
-      404
-    );
-  return types;
-};
-
 export {
   getAllRestaurants,
-  getAllOpenRestaurants,
   getRestaurantById,
   getRestaurantsByType,
   createRestaurant,
   updateRestaurant,
   deleteRestaurant,
+  checkIsOpen,
 };

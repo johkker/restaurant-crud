@@ -19,7 +19,8 @@ const formValidator =
         return next();
       })
       .catch((err) => {
-        throw new GlobalError('Request body error', err.errors, 400);
+        console.log(err);
+        throw new GlobalError('Request body error', 400);
       });
   };
 
